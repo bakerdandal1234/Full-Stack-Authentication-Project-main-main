@@ -22,7 +22,7 @@ export const AuthProvider = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState(null);
-
+  const isAdmin = user?.role === 'user';
   const checkAuth = async () => {
     try {
       const response = await fetch("http://localhost:3000/auth/me", {
@@ -287,6 +287,7 @@ export const AuthProvider = ({ children }) => {
     verifyEmail,
     setIsAuthenticated,
     checkAuth,
+    isAdmin,
   };
 
   return (

@@ -4,9 +4,6 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/Schema');
 const { verifyToken } = require('../middleware');
-const csrf = require('csurf');
-
-const csrfProtection = csrf({ cookie: true });
 
 // Constants
 const APP_URL = 'http://localhost:5173';
@@ -19,7 +16,7 @@ const ROUTES = {
 const generateToken = (user) => {
     return jwt.sign(
         { userId: user._id, email: user.email },
-        process.env.JWT_REFRESH_SECRET,
+        process.env.JWT_SECRET,
         { expiresIn: '15m' }
     );
 };
@@ -71,15 +68,6 @@ router.get('/google', passport.authenticate('google', {
     prompt: 'consent'
 }));
 router.get('/google/callback', handleOAuthCallback('google'));
-
-// Get CSRF Token
-router.get('/csrf-token', csrfProtection, (req, res) => {
-    res.cookie('XSRF-TOKEN', req.csrfToken(), {
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax'
-    });
-    res.json({ success: true });
-});
 
 // Check authentication status
 router.get('/me', async (req, res) => {

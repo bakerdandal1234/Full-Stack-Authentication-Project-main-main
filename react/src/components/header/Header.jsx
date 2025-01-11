@@ -1,7 +1,9 @@
+/*************  ✨ Codeium Command 🌟  *************/
 import React, { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { ColorModeContext } from "../../pages/theme";
+import api from '../../utils/axios';
 import {
   AppBar,
   Box,
@@ -28,7 +30,7 @@ import {
 
 const Header = () => {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user, logout, isAdmin } = useAuth();
   const colorMode = useContext(ColorModeContext);
   const theme = useTheme();
   const [openModal, setOpenModal] = useState(false);
@@ -41,11 +43,8 @@ const Header = () => {
     images: []
   });
 
-  const isAdmin = user && user.role === 'admin';
-
   const handleModalOpen = () => setOpenModal(true);
   const handleModalClose = () => setOpenModal(false);
-
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setProductData(prev => ({
@@ -57,8 +56,34 @@ const Header = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      console.log('Product Data:', productData);
-      handleModalClose();
+      const data = {
+        name: productData.name,
+        description: productData.description,
+        price: parseFloat(productData.price),
+        category: productData.category,
+        stock: parseInt(productData.stock, 10),
+        images: productData.images
+      };
+      
+      console.log('Sending data:', data);
+
+      const response = await fetch('http://localhost:3000/api/ecommerce/products', {
+        method: 'POST',
+        credentials: 'include', // هذا سيرسل الكوكيز تلقائياً
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      });
+
+      const responseData = await response.json();
+      console.log('Response:', responseData);
+
+      if (!response.ok) {
+        throw new Error(responseData.message || 'حدث خطأ أثناء إضافة المنتج');
+      }
+
+      alert("تم إضافة المنتج بنجاح!");
       setProductData({
         name: '',
         description: '',
@@ -67,8 +92,10 @@ const Header = () => {
         stock: '',
         images: []
       });
+      handleModalClose();
     } catch (error) {
-      console.error('Error creating product:', error);
+      console.error("Error saving data:", error);
+      alert("حدث خطأ أثناء حفظ البيانات: " + error.message);
     }
   };
 
@@ -79,7 +106,9 @@ const Header = () => {
 
   return (
     <>
-      <AppBar>
+      <AppBar sx={{
+        position: "static"
+      }}>
         <Toolbar>
           <Typography
             variant="h6"
@@ -106,7 +135,7 @@ const Header = () => {
                 startIcon={<AddIcon />}
                 onClick={handleModalOpen}
               >
-                Add Product
+                إضافة منتج
               </Button>
             )}
 
@@ -116,17 +145,27 @@ const Header = () => {
                 startIcon={<Logout />}
                 onClick={handleLogout}
               >
-                Logout
+                تسجيل الخروج
               </Button>
             ) : (
-              <Button
-                color="inherit"
-                startIcon={<Login />}
-                component={Link}
-                to="/login"
-              >
-                Login
-              </Button>
+              <>
+                <Button
+                  color="inherit"
+                  startIcon={<Login />}
+                  component={Link}
+                  to="/login"
+                >
+                  تسجيل الدخول
+                </Button> 
+                <Button
+                  color="inherit"
+                  startIcon={<Login />}
+                  component={Link}
+                  to="/login"
+                >
+                  انشاء حساب
+                </Button>
+              </>
             )}
           </Stack>
         </Toolbar>
@@ -135,7 +174,8 @@ const Header = () => {
       <Modal
         open={openModal}
         onClose={handleModalClose}
-        aria-labelledby="add-product-modal"
+        aria-labelledby="modal-modal-title"
+        aria-describedby="modal-modal-description"
       >
         <Box sx={{
           position: 'absolute',
@@ -148,66 +188,62 @@ const Header = () => {
           p: 4,
           borderRadius: 2
         }}>
-          <Typography variant="h6" component="h2" sx={{ mb: 3 }}>
-            Add New Product
+          <Typography id="modal-modal-title" variant="h6" component="h2" mb={2}>
+            إضافة منتج جديد
           </Typography>
           <form onSubmit={handleSubmit}>
-            <Stack spacing={3}>
+            <Stack spacing={2}>
               <TextField
-                fullWidth
-                label="Product Name"
                 name="name"
+                label="اسم المنتج"
                 value={productData.name}
                 onChange={handleInputChange}
+                fullWidth
                 required
               />
               <TextField
-                fullWidth
-                label="Description"
                 name="description"
+                label="وصف المنتج"
                 value={productData.description}
                 onChange={handleInputChange}
+                fullWidth
                 multiline
                 rows={3}
                 required
               />
               <TextField
-                fullWidth
-                label="Price"
                 name="price"
+                label="السعر"
                 type="number"
                 value={productData.price}
                 onChange={handleInputChange}
+                fullWidth
                 required
               />
-              <FormControl fullWidth required>
-                <InputLabel>Category</InputLabel>
-                <Select
-                  name="category"
-                  value={productData.category}
-                  label="Category"
-                  onChange={handleInputChange}
-                >
-                  <MenuItem value="electronics">Electronics</MenuItem>
-                  <MenuItem value="clothing">Clothing</MenuItem>
-                  <MenuItem value="books">Books</MenuItem>
-                </Select>
-              </FormControl>
               <TextField
+                name="category"
+                label="الفئة"
+                value={productData.category}
+                onChange={handleInputChange}
                 fullWidth
-                label="Stock"
+                required
+              />
+              <TextField
                 name="stock"
+                label="الكمية المتوفرة"
                 type="number"
                 value={productData.stock}
                 onChange={handleInputChange}
+                fullWidth
                 required
               />
               <Button
                 type="submit"
                 variant="contained"
+                color="primary"
                 fullWidth
               >
-                Create Product
+                حفظ المنتج
               </Button>
             </Stack>
           </form>

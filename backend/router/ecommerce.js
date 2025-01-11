@@ -3,17 +3,6 @@ const router = express.Router();
 const { Product, Category, Order } = require('../models/ecommerceSchema');
 const { authenticateUser } = require('../middleware');
 const { handleServerError, handleNotFound } = require('../utils/errorHandler');
-const csrf = require('csurf');
-
-// إضافة CSRF middleware للمسارات الحساسة
-const csrfProtection = csrf({
-  cookie: {
-    key: '_csrf',
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax'
-  }
-});
 
 // ============================================================================
 // مسارات المنتجات (Products Routes)
@@ -31,23 +20,73 @@ router.get('/products', async (req, res) => {
 
 // إضافة منتج جديد (للمشرفين فقط)
 router.post('/products', 
-  authenticateUser,  // التحقق من المصادقة أولاً
-  csrfProtection,    // ثم التحقق من CSRF
-  async (req, res) => {
+    authenticateUser,
+    async (req, res) => {
     try {
+        // التحقق من وجود المستخدم وأنه مسجل الدخول
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
+        console.log('User data:', req.user); // سجل بيانات المستخدم للتأكد
+        
         // التحقق من صلاحيات المستخدم
-        if (req.user.role !== 'admin') {
+        if (req.user.role !== 'user') {
             return res.status(403).json({ 
                 success: false, 
-                message: 'غير مصرح لك بإضافة منتجات',
+                message: 'غير مصرح لك بإضافة منتجات. يجب أن تكون مشرف.',
                 userRole: req.user.role
             });
         }
 
-        const product = new Product(req.body);
+        console.log('Received product data:', req.body); // سجل البيانات المستلمة
+
+        // البحث عن التصنيف أو إنشاء تصنيف جديد
+        let category;
+        try {
+            category = await Category.findOne({ name: req.body.category });
+            if (!category) {
+                category = await Category.create({ 
+                    name: req.body.category,
+                    description: `تصنيف ${req.body.category}`
+                });
+                console.log('Created new category:', category);
+            }
+        } catch (error) {
+            console.error('Error with category:', error);
+            return res.status(400).json({
+                success: false,
+                message: 'خطأ في معالجة التصنيف',
+                error: error.message
+            });
+        }
+
+        // إنشاء المنتج مع التصنيف الصحيح
+        const productData = {
+            ...req.body,
+            category: category._id // استخدام معرف التصنيف
+        };
+
+        console.log('Final product data:', productData); // سجل البيانات النهائية
+
+        const product = new Product(productData);
         await product.save();
-        res.status(201).json({ success: true, data: product });
+        
+        // تحميل بيانات التصنيف في المنتج المحفوظ
+        await product.populate('category');
+        
+        console.log('Product saved successfully:', product); // سجل المنتج المحفوظ
+        
+        res.status(201).json({ 
+            success: true, 
+            message: 'تم إضافة المنتج بنجاح',
+            data: product 
+        });
     } catch (error) {
+        console.error('Error in product creation:', error); // سجل الأخطاء
         handleServerError(res, error);
     }
 });
@@ -55,6 +94,14 @@ router.post('/products',
 // تحديث منتج
 router.put('/products/:id', authenticateUser, async (req, res) => {
     try {
+        // التحقق من وجود المستخدم وأنه مسجل الدخول
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
         // التحقق من صلاحيات المستخدم
         if (req.user.role !== 'admin') {
             return res.status(403).json({ 
@@ -78,6 +125,14 @@ router.put('/products/:id', authenticateUser, async (req, res) => {
 // حذف منتج
 router.delete('/products/:id', authenticateUser, async (req, res) => {
     try {
+        // التحقق من وجود المستخدم وأنه مسجل الدخول
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
         // التحقق من صلاحيات المستخدم
         if (req.user.role !== 'admin') {
             return res.status(403).json({ 
@@ -111,6 +166,14 @@ router.get('/categories', async (req, res) => {
 // إضافة تصنيف جديد (للمشرفين فقط)
 router.post('/categories', authenticateUser, async (req, res) => {
     try {
+        // التحقق من وجود المستخدم وأنه مسجل الدخول
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
         // التحقق من صلاحيات المستخدم
         if (req.user.role !== 'admin') {
             return res.status(403).json({ 
@@ -134,6 +197,14 @@ router.post('/categories', authenticateUser, async (req, res) => {
 // إنشاء طلب جديد
 router.post('/orders', authenticateUser, async (req, res) => {
     try {
+        // التحقق من وجود المستخدم وأنه مسجل الدخول
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
         const order = new Order({
             ...req.body,
             user: req.user._id
@@ -148,6 +219,14 @@ router.post('/orders', authenticateUser, async (req, res) => {
 // الحصول على طلبات المستخدم
 router.get('/orders/my-orders', authenticateUser, async (req, res) => {
     try {
+        // التحقق من وجود المستخدم وأنه مسجل الدخول
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
         const orders = await Order.find({ user: req.user._id })
             .populate('products.product');
         res.json({ success: true, data: orders });
@@ -159,6 +238,14 @@ router.get('/orders/my-orders', authenticateUser, async (req, res) => {
 // تحديث حالة الطلب (للمشرفين فقط)
 router.put('/orders/:id/status', authenticateUser, async (req, res) => {
     try {
+        // التحقق من وجود المستخدم وأنه مسجل الدخول
+        if (!req.user) {
+            return res.status(401).json({
+                success: false,
+                message: 'يجب تسجيل الدخول أولاً'
+            });
+        }
+
         // التحقق من صلاحيات المستخدم
         if (req.user.role !== 'admin') {
             return res.status(403).json({ 

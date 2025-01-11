@@ -7,7 +7,7 @@ import Signup from "./pages/signup/Signup";
 import Welcome from "./pages/welcome/Welcome";
 import VerifyEmail from "./pages/verify-email/VerifyEmail";
 import AuthSuccess from "./pages/auth/AuthSuccess";
-
+import Header from './components/header/Header'
 import ResetPassword from "./pages/reset-password/ResetPassword";
 
 import { ColorModeContext, useMode } from "./pages/theme";
@@ -22,7 +22,7 @@ function App() {
         <CssBaseline />
         <Router>
           <AuthProvider>
-           
+           <Header/>
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Welcome />} />
