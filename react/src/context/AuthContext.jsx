@@ -72,7 +72,6 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-
   const handleLogout = async () => {
     try {
       const response = await fetch("http://localhost:3000/logout", {

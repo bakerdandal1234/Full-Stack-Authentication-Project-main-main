@@ -82,6 +82,7 @@ const themeSettings = (mode) => ({
         root: {
           textTransform: 'none',
           borderRadius: 8,
+        
          
         }
       },

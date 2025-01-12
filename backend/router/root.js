@@ -87,22 +87,25 @@ router.post("/login", async (req, res) => {
 
     // البحث عن المستخدم
     const user = await User.findOne({ email });
+    console.log("Found user:", user ? "Yes" : "No");
+
     if (!user) {
+      console.log("User not found");
       return handleUnauthorized(res, "البريد الإلكتروني أو كلمة المرور غير صحيحة");
     }
 
     // التحقق من كلمة المرور
+    console.log("Comparing password...");
     const isMatch = await user.comparePassword(password);
+    console.log("Password match:", isMatch);
+
     if (!isMatch) {
+      console.log("Password doesn't match");
       return handleUnauthorized(res, "البريد الإلكتروني أو كلمة المرور غير صحيحة");
     }
 
-    // التحقق من تفعيل الحساب
-    // if (!user.isVerified) {
-    //   return sendError(res, "يرجى تفعيل حسابك من خلال البريد الإلكتروني أولاً");
-    // }
-
-    // إنشاء وتوقيع التوكن
+    // إنشاء التوكن
+    console.log("Creating tokens...");
     const token = jwt.sign(
       { 
         userId: user._id,
@@ -113,21 +116,21 @@ router.post("/login", async (req, res) => {
       { expiresIn: "1d" }
     );
 
-    // تعيين التوكن في الكوكيز
-    res.cookie("token", token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    });
-
     const refreshToken = jwt.sign(
       { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // تعيين التوكن في الكوكيز
+    // إعداد الكوكيز
+    console.log("Setting cookies...");
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    });
+
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -135,9 +138,11 @@ router.post("/login", async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
+    console.log("Login successful");
     res.json({
       success: true,
       message: "تم تسجيل الدخول بنجاح",
+      accessToken: token,
       user: {
         id: user._id,
         username: user.username,
@@ -147,6 +152,7 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
+    console.error("Login error:", error);
     handleServerError(res, error);
   }
 });

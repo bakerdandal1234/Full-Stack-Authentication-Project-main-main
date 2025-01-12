@@ -85,6 +85,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// إضافة مسار ثابت للصور
+app.use('/uploads', express.static('uploads'));
+
 // Session configuration
 app.use(
   session({

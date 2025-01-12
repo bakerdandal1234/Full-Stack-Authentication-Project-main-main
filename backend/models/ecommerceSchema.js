@@ -26,10 +26,10 @@ const productSchema = new mongoose.Schema({
         required: [true, 'كمية المخزون مطلوبة'],
         min: [0, 'المخزون لا يمكن أن يكون سالباً']
     },
-    images: [{
-        url: String,
-        alt: String
-    }],
+    images: {
+        type: [String], // مصفوفة من مسارات الصور
+        default: []
+    },
     createdAt: {
         type: Date,
         default: Date.now

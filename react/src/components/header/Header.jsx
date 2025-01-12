@@ -42,9 +42,14 @@ const Header = () => {
     stock: '',
     images: []
   });
+  const [previewImages, setPreviewImages] = useState([]);
 
   const handleModalOpen = () => setOpenModal(true);
-  const handleModalClose = () => setOpenModal(false);
+  const handleModalClose = () => {
+    setOpenModal(false);
+    setPreviewImages([]);
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setProductData(prev => ({
@@ -53,27 +58,40 @@ const Header = () => {
     }));
   };
 
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    
+    // إنشاء عناوين URL مؤقتة للمعاينة
+    const imageUrls = files.map(file => URL.createObjectURL(file));
+    setPreviewImages(imageUrls);
+    
+    setProductData(prev => ({
+      ...prev,
+      images: files
+    }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const data = {
-        name: productData.name,
-        description: productData.description,
-        price: parseFloat(productData.price),
-        category: productData.category,
-        stock: parseInt(productData.stock, 10),
-        images: productData.images
-      };
+      const formData = new FormData();
+      formData.append('name', productData.name);
+      formData.append('description', productData.description);
+      formData.append('price', productData.price);
+      formData.append('category', productData.category);
+      formData.append('stock', productData.stock);
       
-      console.log('Sending data:', data);
+      // إضافة الصور إلى FormData
+      productData.images.forEach((image, index) => {
+        formData.append(`images`, image);
+      });
+
+      console.log('Sending data:', Object.fromEntries(formData));
 
       const response = await fetch('http://localhost:3000/api/ecommerce/products', {
         method: 'POST',
-        credentials: 'include', // هذا سيرسل الكوكيز تلقائياً
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
+        credentials: 'include',
+        body: formData // لا نحتاج إلى تعيين Content-Type هنا، سيتم تعيينه تلقائياً
       });
 
       const responseData = await response.json();
@@ -92,6 +110,7 @@ const Header = () => {
         stock: '',
         images: []
       });
+      setPreviewImages([]);
       handleModalClose();
     } catch (error) {
       console.error("Error saving data:", error);
@@ -174,8 +193,8 @@ const Header = () => {
       <Modal
         open={openModal}
         onClose={handleModalClose}
-        aria-labelledby="modal-modal-title"
-        aria-describedby="modal-modal-description"
+        aria-labelledby="modal-title"
+        aria-describedby="modal-description"
       >
         <Box sx={{
           position: 'absolute',
@@ -186,9 +205,10 @@ const Header = () => {
           bgcolor: 'background.paper',
           boxShadow: 24,
           p: 4,
-          borderRadius: 2
+          maxHeight: '90vh',
+          overflowY: 'auto'
         }}>
-          <Typography id="modal-modal-title" variant="h6" component="h2" mb={2}>
+          <Typography id="modal-title" variant="h6" component="h2" mb={2}>
             إضافة منتج جديد
           </Typography>
           <form onSubmit={handleSubmit}>
@@ -208,7 +228,7 @@ const Header = () => {
                 onChange={handleInputChange}
                 fullWidth
                 multiline
-                rows={3}
+                rows={4}
                 required
               />
               <TextField
@@ -230,7 +250,7 @@ const Header = () => {
               />
               <TextField
                 name="stock"
-                label="الكمية المتوفرة"
+                label="المخزون"
                 type="number"
                 value={productData.stock}
                 onChange={handleInputChange}
@@ -238,12 +258,41 @@ const Header = () => {
                 required
               />
               <Button
-                type="submit"
-                variant="contained"
-                color="primary"
+                variant="outlined"
+                component="label"
                 fullWidth
               >
-                حفظ المنتج
+                تحميل الصور
+                <input
+                  type="file"
+                  hidden
+                  multiple
+                  accept="image/*"
+                  onChange={handleImageChange}
+                />
+              </Button>
+              
+              {/* عرض معاينة الصور */}
+              {previewImages.length > 0 && (
+                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }}>
+                  {previewImages.map((url, index) => (
+                    <img
+                      key={index}
+                      src={url}
+                      alt={`Preview ${index + 1}`}
+                      style={{
+                        width: '100px',
+                        height: '100px',
+                        objectFit: 'cover',
+                        borderRadius: '4px'
+                      }}
+                    />
+                  ))}
+                </Box>
+              )}
+
+              <Button type="submit" variant="contained" color="primary">
+                إضافة المنتج
               </Button>
             </Stack>
           </form>

@@ -1,8 +1,44 @@
 const express = require('express');
 const router = express.Router();
+const multer = require("multer");
+const path = require("path");
+const fs = require("fs");
 const { Product, Category, Order } = require('../models/ecommerceSchema');
 const { authenticateUser } = require('../middleware');
 const { handleServerError, handleNotFound } = require('../utils/errorHandler');
+
+// تكوين التخزين لـ multer
+const storage = multer.diskStorage({
+    destination: function(req, file, cb) {
+        const uploadPath = path.join(__dirname, '..', 'uploads');
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+        }
+        cb(null, uploadPath);
+    },
+    filename: function(req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+// تكوين multer
+const upload = multer({
+    storage: storage,
+    fileFilter: function(req, file, cb) {
+        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+        if (!allowedTypes.includes(file.mimetype)) {
+            return cb(new Error('نوع الملف غير مدعوم'));
+        }
+        cb(null, true);
+    },
+    limits: {
+        fileSize: 5 * 1024 * 1024 // 5 ميجابايت
+    }
+});
+
+// إضافة middleware لخدمة الملفات الثابتة
+router.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // ============================================================================
 // مسارات المنتجات (Products Routes)
@@ -21,6 +57,7 @@ router.get('/products', async (req, res) => {
 // إضافة منتج جديد (للمشرفين فقط)
 router.post('/products', 
     authenticateUser,
+    upload.array('images', 5), // السماح بتحميل حتى 5 صور
     async (req, res) => {
     try {
         // التحقق من وجود المستخدم وأنه مسجل الدخول
@@ -43,6 +80,15 @@ router.post('/products',
         }
 
         console.log('Received product data:', req.body); // سجل البيانات المستلمة
+        console.log('Received files:', req.files);
+
+        // تحويل البيانات إلى الأنواع المناسبة
+        const productData = {
+            ...req.body,
+            price: parseFloat(req.body.price),
+            stock: parseInt(req.body.stock),
+            images: req.files ? req.files.map(file => file.filename) : []
+        };
 
         // البحث عن التصنيف أو إنشاء تصنيف جديد
         let category;
@@ -65,10 +111,7 @@ router.post('/products',
         }
 
         // إنشاء المنتج مع التصنيف الصحيح
-        const productData = {
-            ...req.body,
-            category: category._id // استخدام معرف التصنيف
-        };
+        productData.category = category._id; // استخدام معرف التصنيف
 
         console.log('Final product data:', productData); // سجل البيانات النهائية
 
@@ -87,38 +130,88 @@ router.post('/products',
         });
     } catch (error) {
         console.error('Error in product creation:', error); // سجل الأخطاء
+        
+        // إزالة الصور المحملة في حالة حدوث خطأ
+        if (req.files) {
+            req.files.forEach(file => {
+                fs.unlink(file.path, err => {
+                    if (err) console.error('Error deleting file:', err);
+                });
+            });
+        }
+
         handleServerError(res, error);
     }
 });
 
 // تحديث منتج
-router.put('/products/:id', authenticateUser, async (req, res) => {
+router.put('/products/:id', authenticateUser, upload.array('images'), async (req, res) => {
     try {
-        // التحقق من وجود المستخدم وأنه مسجل الدخول
+        const productId = req.params.id;
+        const { name, description, price, stock, category, discount } = req.body;
+        
+        console.log('Updating product:', productId);
+        console.log('Request body:', req.body);
+        console.log('Files:', req.files);
+
+        // التحقق من المصادقة
         if (!req.user) {
-            return res.status(401).json({
-                success: false,
-                message: 'يجب تسجيل الدخول أولاً'
-            });
+            return res.status(401).json({ success: false, message: 'غير مصرح' });
         }
 
-        // التحقق من صلاحيات المستخدم
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({ 
-                success: false, 
-                message: 'غير مصرح لك بتعديل المنتجات' 
-            });
+        // البحث عن المنتج
+        const existingProduct = await Product.findById(productId);
+        if (!existingProduct) {
+            return res.status(404).json({ success: false, message: 'المنتج غير موجود' });
         }
 
-        const product = await Product.findByIdAndUpdate(
-            req.params.id,
-            req.body,
+        const updateData = {
+            name,
+            description,
+            price: parseFloat(price) || existingProduct.price,
+            stock: parseInt(stock) || existingProduct.stock,
+            category: category || existingProduct.category,
+            discount: parseFloat(discount) || 0
+        };
+
+        // معالجة الصور
+        if (req.files && req.files.length > 0) {
+            console.log('Processing new images');
+            
+            // حذف الصور القديمة
+            if (existingProduct.images && existingProduct.images.length > 0) {
+                existingProduct.images.forEach(imagePath => {
+                    const fullPath = path.join(__dirname, '..', 'uploads', imagePath);
+                    if (fs.existsSync(fullPath)) {
+                        fs.unlinkSync(fullPath);
+                    }
+                });
+            }
+
+            // إضافة الصور الجديدة
+            updateData.images = req.files.map(file => file.filename);
+        }
+
+        // تحديث المنتج
+        const updatedProduct = await Product.findByIdAndUpdate(
+            productId,
+            updateData,
             { new: true }
-        );
-        if (!product) return handleNotFound(res, 'المنتج غير موجود');
-        res.json({ success: true, data: product });
+        ).populate('category');
+
+        if (!updatedProduct) {
+            return res.status(500).json({ success: false, message: 'فشل في تحديث المنتج' });
+        }
+
+        console.log('Product updated successfully:', updatedProduct);
+        res.json({ success: true, data: updatedProduct });
     } catch (error) {
-        handleServerError(res, error);
+        console.error('Error updating product:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'خطأ في تحديث المنتج',
+            error: error.message 
+        });
     }
 });
 
@@ -133,18 +226,37 @@ router.delete('/products/:id', authenticateUser, async (req, res) => {
             });
         }
 
-        // التحقق من صلاحيات المستخدم
-        if (req.user.role !== 'admin') {
-            return res.status(403).json({ 
-                success: false, 
-                message: 'غير مصرح لك بحذف المنتجات' 
+        const productId = req.params.id;
+        
+        // البحث عن المنتج وحذفه
+        const product = await Product.findById(productId);
+        
+        if (!product) {
+            return res.status(404).json({
+                success: false,
+                message: 'المنتج غير موجود'
             });
         }
 
-        const product = await Product.findByIdAndDelete(req.params.id);
-        if (!product) return handleNotFound(res, 'المنتج غير موجود');
-        res.json({ success: true, message: 'تم حذف المنتج بنجاح' });
+        // حذف الصور المرتبطة بالمنتج
+        if (product.images && product.images.length > 0) {
+            product.images.forEach(imagePath => {
+                const fullPath = path.join(__dirname, '..', 'uploads', imagePath);
+                if (fs.existsSync(fullPath)) {
+                    fs.unlinkSync(fullPath);
+                }
+            });
+        }
+
+        // حذف المنتج من قاعدة البيانات
+        await Product.findByIdAndDelete(productId);
+
+        res.json({
+            success: true,
+            message: 'تم حذف المنتج بنجاح'
+        });
     } catch (error) {
+        console.error('Error deleting product:', error);
         handleServerError(res, error);
     }
 });
